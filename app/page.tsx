@@ -10,8 +10,9 @@ export default function YouTubeMP3Player() {
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
 
-	const API_KEY = "a6389cf97dmsh7a0cc967f520fc9p1458d3jsn8dfc2d9e88a7";
-	const API_HOST = "youtube-mp36.p.rapidapi.com";
+	
+	const API_KEY = process.env.NEXT_PUBLIC_API_KEY;
+	const API_HOST = process.env.NEXT_PUBLIC_API_HOST;
 
 	// Load previously saved song
 	useEffect(() => {

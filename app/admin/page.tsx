@@ -28,8 +28,8 @@ export default function AdminPage() {
 		infoRef.current = { title, downloadUrl };
 	}, [title, downloadUrl]);
 
-	const API_KEY = "a6389cf97dmsh7a0cc967f520fc9p1458d3jsn8dfc2d9e88a7";
-	const API_HOST = "youtube-mp36.p.rapidapi.com";
+	const API_KEY = process.env.NEXT_PUBLIC_API_KEY;
+	const API_HOST = process.env.NEXT_PUBLIC_API_HOST;
 
 	const handleFetch = async () => {
 		if (!videoId.trim()) return alert("Enter YouTube link or video ID");
