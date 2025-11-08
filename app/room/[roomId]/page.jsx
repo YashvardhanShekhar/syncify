@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useParams } from "next/navigation";
+import { couldStartTrivia } from "typescript";
 
 const supabase = createClient(
 	process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -29,29 +30,7 @@ export default function ListenerPage() {
 		});
 		setChannel(ch);
 
-		// Announce join
-		ch.subscribe((status) => {
-			if (status === "SUBSCRIBED") {
-				setStatus(`Connected to ${roomId}, waiting for admin...`);
-				ch.send({
-					type: "broadcast",
-					event: "join",
-					payload: { clientId: clientId.current },
-				});
-				console.log("✅ Joined as", clientId.current);
-			}
-		});
-
-		// Announce leave
-		window.addEventListener("beforeunload", () => {
-			ch.send({
-				type: "broadcast",
-				event: "leave",
-				payload: { clientId: clientId.current },
-			});
-		});
-
-		// --- Ping every 2s to measure offset ---
+		// --- Ping to measure offset ---
 		const ping = () => {
 			const sentAt = Date.now();
 			ch.send({
@@ -64,26 +43,33 @@ export default function ListenerPage() {
 		ch.on("broadcast", { event: "pong" }, (payload) => {
 			const { clientId: target, sentAt, serverTime } = payload.payload;
 			if (target !== clientId.current) return;
-
 			const now = Date.now();
 			const rtt = now - sentAt;
 			const offset = serverTime + rtt / 2 - now;
 			clockOffset.current = offset;
 			setMsDelay(rtt / 2);
-			console.log(`RTT=${rtt}ms | Offset=${offset.toFixed(2)}ms`);
 		});
 
 		const pingInterval = setInterval(ping, 2000);
 		ping();
 
-		// --- Handle sync events ---
 		ch.on("broadcast", { event: "sync" }, async (payload) => {
 			const data = payload.payload;
 			if (!data) return;
+
 			const audio = audioRef.current;
 			const correctedNow = Date.now() + clockOffset.current;
 			const latency = (correctedNow - data.sentAt) / 1000;
 			const targetTime = (data.currentTime || 0) + latency;
+
+			// ✅ Only respond to this client’s init
+			if (
+				data.type === "init" &&
+				data.clientId &&
+				data.clientId !== clientId.current
+			) {
+				return;
+			}
 
 			if (data.type === "init") {
 				setTitle(data.title);
@@ -93,6 +79,7 @@ export default function ListenerPage() {
 					const blob = await res.blob();
 					setAudioUrl(URL.createObjectURL(blob));
 					setStatus("Ready 🎧");
+					console.log( data)
 				} catch {
 					setStatus("Download failed ❌");
 				}
@@ -111,6 +98,11 @@ export default function ListenerPage() {
 			}
 
 			if (data.type === "sync" || data.type === "play") {
+				if (data.isPlaying) {
+					audio.play().catch(() => {});
+				} else {
+					audio.pause();
+				}
 				const diff = targetTime - audio.currentTime;
 				if (Math.abs(diff) > 0.3) {
 					audio.currentTime = targetTime;
@@ -123,6 +115,21 @@ export default function ListenerPage() {
 					);
 				}
 			}
+		});
+
+		ch.subscribe((status) => {
+			if (status === "SUBSCRIBED") {
+				setStatus(`Connected to ${roomId}, waiting for admin...`);
+				console.log("✅ Joined channel room-" + roomId);
+			}
+		});
+
+		window.addEventListener("beforeunload", () => {
+			ch.send({
+				type: "broadcast",
+				event: "leave",
+				payload: { clientId: clientId.current },
+			});
 		});
 
 		return () => {
@@ -143,14 +150,72 @@ export default function ListenerPage() {
 			{title && <h3>{title}</h3>}
 			<p>Avg Delay: {msDelay.toFixed(1)} ms</p>
 
-			{audioUrl && (
-				<audio
-					ref={audioRef}
-					controls
-					src={audioUrl}
-					style={{ width: "80%", marginTop: 20 }}
-				/>
+			{!audioUrl ? (
+				<p>Waiting for admin...</p>
+			) : (
+				<>
+					{!window.unlocked && (
+						<div
+							style={{
+								background: "rgba(0,0,0,0.8)",
+								color: "white",
+								position: "fixed",
+								inset: 0,
+								display: "flex",
+								justifyContent: "center",
+								alignItems: "center",
+								flexDirection: "column",
+								zIndex: 9999,
+							}}
+						>
+							<p style={{ fontSize: 18, marginBottom: 10 }}>
+								Tap below to enable audio 🎵
+							</p>
+							<button
+								onClick={() => {
+									const audio = audioRef.current;
+									audio
+										.play()
+										.then(() => {
+											audio.pause();
+											window.unlocked = true;
+											document.querySelector(
+												"#unlock-overlay"
+											).style.display = "none";
+											console.log(
+												"✅ Audio context unlocked"
+											);
+										})
+										.catch((e) =>
+											console.warn("⚠️ Unlock failed", e)
+										);
+								}}
+								id="unlock-overlay"
+								style={{
+									background: "#0070f3",
+									border: "none",
+									color: "white",
+									padding: "12px 24px",
+									fontSize: "16px",
+									borderRadius: "8px",
+									cursor: "pointer",
+								}}
+							>
+								Enable Audio
+							</button>
+						</div>
+					)}
+
+					<audio
+						ref={audioRef}
+						controls={false}
+						preload="auto"
+						src={audioUrl}
+						style={{ width: "80%", marginTop: 20 }}
+					/>
+				</>
 			)}
 		</div>
 	);
+
 }

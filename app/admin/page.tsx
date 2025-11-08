@@ -13,14 +13,20 @@ export default function AdminPage() {
 	const [videoId, setVideoId] = useState("");
 	const [audioUrl, setAudioUrl] = useState("");
 	const [title, setTitle] = useState("");
+	const [downloadUrl,setDownloadUrl] = useState("")
 	const [roomId, setRoomId] = useState(null);
 	const [channel, setChannel] = useState(null);
 	const [loading, setLoading] = useState(false);
 	const [status, setStatus] = useState("");
-	const [info, setInfo] = useState({});
 	const [activeUsers, setActiveUsers] = useState(0);
 	const audioRef = useRef(null);
-	const clients = useRef(new Set()); // track unique clientIds
+	const clients = useRef(new Set()); // track unique clients
+	const infoRef = useRef({ title: "", downloadUrl: "" });
+
+	// whenever these values change:
+	useEffect(() => {
+		infoRef.current = { title, downloadUrl };
+	}, [title, downloadUrl]);
 
 	const API_KEY = "a6389cf97dmsh7a0cc967f520fc9p1458d3jsn8dfc2d9e88a7";
 	const API_HOST = "youtube-mp36.p.rapidapi.com";
@@ -47,8 +53,10 @@ export default function AdminPage() {
 				throw new Error("Conversion failed");
 
 			setTitle(data.title);
+			setDownloadUrl(data.link);
 			setStatus("Downloading audio...");
 			const audioRes = await fetch(data.link);
+
 			const blob = await audioRes.blob();
 			const blobUrl = URL.createObjectURL(blob);
 			setAudioUrl(blobUrl);
@@ -60,10 +68,34 @@ export default function AdminPage() {
 				config: { broadcast: { self: true } },
 			});
 			setChannel(ch);
-
-			// --- Handle events ---
+			setStatus("");
+			// --- Handle pings ---
 			ch.on("broadcast", { event: "ping" }, (payload) => {
 				const { sentAt, clientId } = payload.payload;
+
+				// 🧠 Register new client
+				if (!clients.current.has(clientId)) {
+					clients.current.add(clientId);
+					setActiveUsers(clients.current.size);
+					console.log("👤 New client joined:", clientId);
+					const { title, downloadUrl } = infoRef.current;
+
+					// Send init payload specifically to that client
+					ch.send({
+						type: "broadcast",
+						event: "sync",
+						payload: {
+							clientId,
+							type: "init",
+							title: title,
+							downloadUrl: downloadUrl,
+							currentTime: audioRef.current?.currentTime || 0,
+							sentAt: Date.now(),
+						},
+					});
+				}
+
+				// Always reply with pong
 				ch.send({
 					type: "broadcast",
 					event: "pong",
@@ -71,16 +103,7 @@ export default function AdminPage() {
 				});
 			});
 
-			// 🟢 Handle client join/leave
-			ch.on("broadcast", { event: "join" }, (payload) => {
-				const { clientId } = payload.payload;
-				if (!clients.current.has(clientId)) {
-					clients.current.add(clientId);
-					setActiveUsers(clients.current.size);
-					console.log("👤 Client joined:", clientId);
-				}
-			});
-
+			// 🟢 Handle leaves
 			ch.on("broadcast", { event: "leave" }, (payload) => {
 				const { clientId } = payload.payload;
 				if (clients.current.has(clientId)) {
@@ -93,23 +116,9 @@ export default function AdminPage() {
 			ch.subscribe((status) => {
 				if (status === "SUBSCRIBED") {
 					console.log("✅ Admin subscribed to room", id4);
-					const initPayload = {
-						type: "init",
-						title: data.title,
-						downloadUrl: data.link,
-						videoId: id,
-						sentAt: Date.now(),
-					};
-					ch.send({
-						type: "broadcast",
-						event: "sync",
-						payload: initPayload,
-					});
-					setInfo(initPayload);
+					setStatus(`Room created: ${id4}`);
 				}
 			});
-
-			setStatus(`Room created: ${id4}`);
 		} catch (err) {
 			console.error(err);
 			alert(err.message);
@@ -134,7 +143,10 @@ export default function AdminPage() {
 
 	useEffect(() => {
 		if (!channel) return;
-		const interval = setInterval(() => broadcast("sync"), 2000);
+		const interval = setInterval(
+			() => broadcast("sync", { isPlaying: !audioRef.current?.paused }),
+			2000
+		);
 		return () => clearInterval(interval);
 	}, [channel]);
 
