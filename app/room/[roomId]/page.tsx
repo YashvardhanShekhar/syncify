@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useParams } from "next/navigation";
-import { Music, Users, Clock } from "lucide-react";
+import { Music, Clock } from "lucide-react";
 
 const supabase = createClient(
 	process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -16,10 +16,11 @@ export default function ListenerPage() {
 	const [unlocked, setUnlocked] = useState(false);
 	const [title, setTitle] = useState("");
 	const [status, setStatus] = useState("Waiting for admin...");
-	const [channel, setChannel] = useState(null);
+	const [channel, setChannel] = useState<any>(null);
 	const [msDelay, setMsDelay] = useState(0);
+
 	const clientId = useRef(Math.random().toString(36).slice(2, 10));
-	const audioRef = useRef(null);
+	const audioRef = useRef<HTMLAudioElement>(null);
 	let clockOffset = useRef(0);
 
 	useEffect(() => {
@@ -31,7 +32,7 @@ export default function ListenerPage() {
 		});
 		setChannel(ch);
 
-		// --- Ping to measure offset ---
+		// Ping to measure latency
 		const ping = () => {
 			const sentAt = Date.now();
 			ch.send({
@@ -48,7 +49,7 @@ export default function ListenerPage() {
 			const rtt = now - sentAt;
 			const offset = serverTime + rtt / 2 - now;
 			clockOffset.current = offset;
-			setMsDelay(rtt / 2);
+			setMsDelay(Math.round(rtt / 2));
 		});
 
 		const pingInterval = setInterval(ping, 2000);
@@ -63,14 +64,13 @@ export default function ListenerPage() {
 			const latency = (correctedNow - data.sentAt) / 1000;
 			const targetTime = (data.currentTime || 0) + latency;
 
-			// ✅ Only respond to this client’s init
 			if (
 				data.type === "init" &&
 				data.clientId &&
+				data.clientId !== "admin" &&
 				data.clientId !== clientId.current
-			) {
+			)
 				return;
-			}
 
 			if (data.type === "init") {
 				setTitle(data.title);
@@ -80,7 +80,6 @@ export default function ListenerPage() {
 					const blob = await res.blob();
 					setAudioUrl(URL.createObjectURL(blob));
 					setStatus("Ready 🎧");
-					console.log(data);
 				} catch {
 					setStatus("Download failed ❌");
 				}
@@ -99,18 +98,16 @@ export default function ListenerPage() {
 			}
 
 			if (data.type === "sync" || data.type === "play") {
-				if (data.isPlaying) {
-					audio.play().catch(() => {});
-				} else {
-					audio.pause();
-				}
+				if (data.isPlaying) audio.play().catch(() => {});
+				else audio.pause();
+
 				const diff = targetTime - audio.currentTime;
 				if (Math.abs(diff) > 0.3) {
 					audio.currentTime = targetTime;
 				} else {
 					audio.playbackRate = 1 + diff * 0.2;
-					clearTimeout(audio._syncReset);
-					audio._syncReset = setTimeout(
+					clearTimeout((audio as any)._syncReset);
+					(audio as any)._syncReset = setTimeout(
 						() => (audio.playbackRate = 1),
 						1000
 					);
@@ -118,8 +115,8 @@ export default function ListenerPage() {
 			}
 		});
 
-		ch.subscribe((status) => {
-			if (status === "SUBSCRIBED") {
+		ch.subscribe((s) => {
+			if (s === "SUBSCRIBED") {
 				setStatus(`Connected to ${roomId}, waiting for admin...`);
 				console.log("✅ Joined channel room-" + roomId);
 			}
@@ -145,446 +142,118 @@ export default function ListenerPage() {
 	}, [roomId]);
 
 	return (
-		<div
-			style={{
-				minHeight: "100vh",
-				background:
-					"linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)",
-				display: "flex",
-				alignItems: "center",
-				justifyContent: "center",
-				padding: "20px",
-				fontFamily:
-					'-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-			}}
-		>
-			<div style={{ width: "100%", maxWidth: "480px" }}>
-				{/* Main Card */}
-				<div
-					style={{
-						background: "rgba(255, 255, 255, 0.95)",
-						backdropFilter: "blur(20px)",
-						borderRadius: "32px",
-						boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
-						overflow: "hidden",
-					}}
-				>
-					{/* Header */}
-					<div
-						style={{
-							background:
-								"linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-							padding: "32px 24px",
-							color: "white",
-							textAlign: "center",
-						}}
-					>
-						<div
-							style={{
-								display: "flex",
-								alignItems: "center",
-								justifyContent: "center",
-								gap: "12px",
-								marginBottom: "12px",
-							}}
-						>
-							<Music size={32} />
-							<h1
-								style={{
-									fontSize: "28px",
-									fontWeight: "bold",
-									margin: 0,
-								}}
-							>
-								Music Sync
-							</h1>
-						</div>
-						<div
-							style={{
-								display: "flex",
-								alignItems: "center",
-								justifyContent: "center",
-								gap: "8px",
-								fontSize: "14px",
-								opacity: 0.95,
-							}}
-						>
+		<div className="min-h-screen w-full flex flex-col lg:flex-row items-start lg:items-center justify-start lg:justify-between relative">
+			{/* LEFT CONTENT */}
+			<div className="w-full lg:w-3/5 px-4 sm:px-8 py-6 sm:py-12 flex flex-col justify-start">
+				<div className="max-w-2xl relative">
+					{/* Header + Latency Badge */}
+					<div className="relative mb-6">
+						<h2 className="text-3xl font-semibold text-white">
+							🎵 Syncify Listener
+						</h2>
+
+						<div className="absolute right-0 top-0 flex items-center gap-2">
 							<div
-								style={{
-									width: "8px",
-									height: "8px",
-									borderRadius: "50%",
-									background:
-										status === "Connected"
-											? "#86efac"
-											: "#fde047",
-									animation:
-										"pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-								}}
-							></div>
-							<span>{status}</span>
+								className="inline-flex items-center gap-2 bg-white/6 backdrop-blur-sm border border-white/8 text-sm px-3 py-1 rounded-full"
+								title="Average Latency"
+							>
+								<Clock className="w-4 h-4 text-white" />
+								<span className="text-white">{msDelay} ms</span>
+							</div>
 						</div>
 					</div>
 
-					{/* Content */}
-					<div style={{ padding: "32px 24px" }}>
-						{/* Now Playing */}
-						{title && (
-							<div
-								style={{
-									textAlign: "center",
-									marginBottom: "32px",
-								}}
-							>
-								<div
-									style={{
-										display: "inline-flex",
-										alignItems: "center",
-										justifyContent: "center",
-										width: "80px",
-										height: "80px",
-										background:
-											"linear-gradient(135deg, #818cf8 0%, #a78bfa 100%)",
-										borderRadius: "50%",
-										marginBottom: "16px",
-										boxShadow:
-											"0 10px 25px -5px rgba(129, 140, 248, 0.5)",
-									}}
-								>
-									<Music size={40} color="white" />
-								</div>
-								<h2
-									style={{
-										fontSize: "24px",
-										fontWeight: "600",
-										color: "#1f2937",
-										margin: "0 0 8px 0",
-									}}
-								>
-									{title}
-								</h2>
-								<p
-									style={{
-										fontSize: "14px",
-										color: "#6b7280",
-										margin: 0,
-									}}
-								>
-									Now Playing
-								</p>
-							</div>
-						)}
-
-						{/* Stats */}
+					{/* Status */}
+					{status && (
 						<div
-							style={{
-								display: "grid",
-								gridTemplateColumns: "1fr 1fr",
-								gap: "16px",
-								marginBottom: "32px",
-							}}
+							className={`mt-4 px-4 py-3 rounded-md text-sm border transition-all duration-300 ${
+								status.toLowerCase().includes("failed") ||
+								status.toLowerCase().includes("error")
+									? "bg-red-500/20 text-red-200 border-red-500/30"
+									: "bg-white/10 text-white border-white/10"
+							}`}
 						>
-							<div
-								style={{
-									background:
-										"linear-gradient(135deg, #e0e7ff 0%, #ede9fe 100%)",
-									borderRadius: "20px",
-									padding: "24px 16px",
-									textAlign: "center",
-								}}
-							>
-								<Clock
-									size={24}
-									color="#6366f1"
-									style={{ margin: "0 auto 12px" }}
-								/>
-								<div
-									style={{
-										fontSize: "28px",
-										fontWeight: "bold",
-										color: "#1f2937",
-									}}
-								>
-									{msDelay.toFixed(1)}
-								</div>
-								<div
-									style={{
-										fontSize: "12px",
-										color: "#6b7280",
-										marginTop: "4px",
-									}}
-								>
-									Avg Delay (ms)
-								</div>
-							</div>
-							<div
-								style={{
-									background:
-										"linear-gradient(135deg, #fae8ff 0%, #fce7f3 100%)",
-									borderRadius: "20px",
-									padding: "24px 16px",
-									textAlign: "center",
-								}}
-							>
-								<Users
-									size={24}
-									color="#a855f7"
-									style={{ margin: "0 auto 12px" }}
-								/>
-								<div
-									style={{
-										fontSize: "28px",
-										fontWeight: "bold",
-										color: "#1f2937",
-									}}
-								>
-									Live
-								</div>
-								<div
-									style={{
-										fontSize: "12px",
-										color: "#6b7280",
-										marginTop: "4px",
-									}}
-								>
-									Sync Mode
-								</div>
-							</div>
+							{status}
 						</div>
+					)}
 
-						{/* Audio Section */}
-						{!audioUrl ? (
-							<div
-								style={{
-									textAlign: "center",
-									padding: "32px 0",
-								}}
-							>
-								<div
-									style={{
-										display: "inline-flex",
-										alignItems: "center",
-										justifyContent: "center",
-										width: "64px",
-										height: "64px",
-										background: "#f3f4f6",
-										borderRadius: "50%",
-										marginBottom: "16px",
-									}}
-								>
-									<Music size={32} color="#9ca3af" />
-								</div>
-								<p
-									style={{
-										color: "#6b7280",
-										margin: 0,
-									}}
-								>
-									Waiting for admin to start...
-								</p>
-							</div>
-						) : (
-							<div>
-								{/* Audio Element - No Controls */}
-								<audio
-									ref={audioRef}
-									src={audioUrl}
-									preload="auto"
-									style={{ display: "none" }}
-								/>
+					{/* Song + listening indicator */}
+					{audioUrl && (
+						<div className="mt-8 bg-white/4 border border-white/6 p-6 rounded-lg">
+							<div className="flex flex-col gap-4 items-center text-center">
+								<h3 className="text-xl text-white font-medium">
+									{title || "Now Playing"}
+								</h3>
 
 								{/* Listening Indicator */}
-								<div
-									style={{
-										background:
-											"linear-gradient(135deg, #e0e7ff 0%, #ede9fe 100%)",
-										borderRadius: "20px",
-										padding: "32px 24px",
-										textAlign: "center",
-									}}
-								>
-									<div
-										style={{
-											display: "flex",
-											alignItems: "center",
-											justifyContent: "center",
-											gap: "12px",
-											marginBottom: "16px",
-										}}
-									>
-										<div
-											style={{
-												width: "12px",
-												height: "12px",
-												background: "#22c55e",
-												borderRadius: "50%",
-												animation:
-													"pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-											}}
-										></div>
-										<div
-											style={{
-												width: "8px",
-												height: "8px",
-												background: "#4ade80",
-												borderRadius: "50%",
-												animation:
-													"pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-												animationDelay: "0.2s",
-											}}
-										></div>
-										<div
-											style={{
-												width: "8px",
-												height: "8px",
-												background: "#86efac",
-												borderRadius: "50%",
-												animation:
-													"pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-												animationDelay: "0.4s",
-											}}
-										></div>
+								<div className="flex flex-col items-center justify-center mt-3">
+									{/* Animated Equalizer Bars */}
+									<div className="flex items-end justify-center gap-1 h-5 mb-1">
+										<div className="w-1.5 h-2 bg-green-400 rounded-sm animate-[bounce_0.9s_ease-in-out_infinite]" />
+										<div className="w-1.5 h-3 bg-green-300 rounded-sm animate-[bounce_0.8s_ease-in-out_infinite]" />
+										<div className="w-1.5 h-4 bg-green-500 rounded-sm animate-[bounce_1s_ease-in-out_infinite]" />
+										<div className="w-1.5 h-3 bg-green-400 rounded-sm animate-[bounce_1.1s_ease-in-out_infinite]" />
 									</div>
-									<p
-										style={{
-											color: "#374151",
-											fontWeight: "500",
-											margin: "0 0 8px 0",
-											fontSize: "16px",
-										}}
-									>
+
+									{/* Text */}
+									<span className="text-white/70 text-sm tracking-wide">
 										Listening in sync
-									</p>
-									<p
-										style={{
-											fontSize: "12px",
-											color: "#6b7280",
-											margin: 0,
-										}}
-									>
-										Audio controlled by admin
-									</p>
+									</span>
 								</div>
 							</div>
-						)}
-					</div>
-				</div>
 
-				{/* Footer Info */}
-				<div
-					style={{
-						textAlign: "center",
-						marginTop: "20px",
-						fontSize: "14px",
-						color: "rgba(255, 255, 255, 0.9)",
-					}}
-				>
-					<p style={{ margin: 0 }}>Synced playback • Low latency</p>
+							<audio
+								ref={audioRef}
+								src={audioUrl}
+								preload="auto"
+								style={{ display: "none" }}
+							/>
+						</div>
+					)}
+
+					{!audioUrl && (
+						<p className="mt-6 text-sm text-white/70">
+							Waiting for admin to start playback...
+						</p>
+					)}
+
+					<p className="mt-6 text-xs text-white/60">
+						Audio syncs automatically with admin control.
+					</p>
 				</div>
 			</div>
 
-			{/* Unlock Overlay */}
+			{/* RIGHT SIDE animation */}
+			<div
+				className="block lg:w-2/5 lg:block w-full mt-10"
+				aria-hidden="true"
+			/>
+
+			{/*  Unlock overlay */}
 			{audioUrl && !unlocked && (
-				<div
-					style={{
-						position: "fixed",
-						inset: 0,
-						background: "rgba(0, 0, 0, 0.92)",
-						backdropFilter: "blur(8px)",
-						display: "flex",
-						alignItems: "center",
-						justifyContent: "center",
-						zIndex: 9999,
-						padding: "20px",
-					}}
-				>
-					<div
-						style={{
-							textAlign: "center",
-							maxWidth: "400px",
-						}}
-					>
-						<div
-							style={{
-								display: "inline-flex",
-								alignItems: "center",
-								justifyContent: "center",
-								width: "80px",
-								height: "80px",
-								background:
-									"linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-								borderRadius: "50%",
-								marginBottom: "24px",
-								boxShadow:
-									"0 20px 40px -10px rgba(102, 126, 234, 0.6)",
-							}}
-						>
-							<Music size={40} color="white" />
+				<div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md">
+					<div className="bg-white/10 border border-white/20 rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl">
+						<div className="flex flex-col items-center gap-4">
+							<div className="p-4 bg-violet-600/20 rounded-full">
+								<Music className="w-8 h-8 text-violet-400" />
+							</div>
+							<h2 className="text-2xl font-semibold text-white">
+								Enable Audio Playback
+							</h2>
+							<p className="text-white/70 text-sm">
+								To sync with the admin’s music, allow playback
+								on your device.
+							</p>
+							<button
+								onClick={() => setUnlocked(true)}
+								className="mt-4 px-6 py-3 bg-violet-600 hover:bg-violet-700 rounded-md text-white font-medium transition-colors"
+							>
+								Allow
+							</button>
 						</div>
-						<h2
-							style={{
-								fontSize: "32px",
-								fontWeight: "bold",
-								color: "white",
-								margin: "0 0 16px 0",
-							}}
-						>
-							Ready to Listen?
-						</h2>
-						<p
-							style={{
-								color: "#d1d5db",
-								fontSize: "18px",
-								margin: "0 0 32px 0",
-							}}
-						>
-							Tap below to enable audio playback
-						</p>
-						<button
-							onClick={() => setUnlocked(true)}
-							style={{
-								width: "100%",
-								maxWidth: "320px",
-								background:
-									"linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)",
-								color: "white",
-								fontWeight: "600",
-								padding: "18px 32px",
-								borderRadius: "50px",
-								border: "none",
-								fontSize: "16px",
-								cursor: "pointer",
-								boxShadow:
-									"0 20px 40px -10px rgba(102, 126, 234, 0.6)",
-								transition: "transform 0.2s, box-shadow 0.2s",
-							}}
-							onMouseEnter={(e) => {
-								e.target.style.transform = "scale(1.05)";
-								e.target.style.boxShadow =
-									"0 25px 50px -10px rgba(102, 126, 234, 0.8)";
-							}}
-							onMouseLeave={(e) => {
-								e.target.style.transform = "scale(1)";
-								e.target.style.boxShadow =
-									"0 20px 40px -10px rgba(102, 126, 234, 0.6)";
-							}}
-						>
-							Enable Audio 🎵
-						</button>
 					</div>
 				</div>
 			)}
-
-			<style>{`
-        @keyframes pulse {
-          0%, 100% {
-            opacity: 1;
-          }
-          50% {
-            opacity: .5;
-          }
-        }
-      `}</style>
 		</div>
 	);
 }
