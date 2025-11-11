@@ -3,7 +3,7 @@
 html, body {
   margin: 0;
   padding: 0;
-  height: 100%;
+  height: auto;
   background-color: #04042f;
   z-index: -5;
   color: white;

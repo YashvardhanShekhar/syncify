@@ -6,9 +6,10 @@ import { useParams } from "next/navigation";
 import { Music, Clock } from "lucide-react";
 
 const supabase = createClient(
-	process.env.NEXT_PUBLIC_SUPABASE_URL,
-	process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+	process.env.NEXT_PUBLIC_SUPABASE_URL!,
+	process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
 
 export default function ListenerPage() {
 	const { roomId } = useParams();
@@ -142,7 +143,7 @@ export default function ListenerPage() {
 	}, [roomId]);
 
 	return (
-		<div className="min-h-screen w-full flex flex-col lg:flex-row items-start lg:items-center justify-start lg:justify-between relative">
+		<div className="min-h-screen w-full flex flex-col lg:flex-row items-start lg:items-center justify-start lg:justify-between relative bg-black/40">
 			{/* LEFT CONTENT */}
 			<div className="w-full lg:w-3/5 px-4 sm:px-8 py-6 sm:py-12 flex flex-col justify-start">
 				<div className="max-w-2xl relative">

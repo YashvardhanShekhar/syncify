@@ -51,7 +51,7 @@ export default function VantaBackground() {
 						// @ts-ignore
 						effect = window.VANTA.HALO(config);
 						if (isMobile && vantaRef.current) {
-							vantaRef.current.style.opacity = "0.4";
+							vantaRef.current.style.opacity = "0.6";
 						}
 					} else {
 						setTimeout(initVanta, 200);
@@ -69,5 +69,5 @@ export default function VantaBackground() {
 		};
 	}, []);
 
-	return <div ref={vantaRef} className="w-full h-screen transition-opacity duration-500" />;
+	return <div ref={vantaRef} className="w-full h-screen transition-opacity duration-500 "/>;
 }
