@@ -21,7 +21,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 
 // --- Universal YouTube ID extractor ---
-function extractYouTubeId(url) {
+function extractYouTubeId(url: string): string | null {
 	try {
 		if (!url || typeof url !== "string") return null;
 
