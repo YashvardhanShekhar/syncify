@@ -19,7 +19,6 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-
 // --- Universal YouTube ID extractor ---
 function extractYouTubeId(url: string): string | null {
 	try {
@@ -61,14 +60,14 @@ export default function AdminPage() {
 	const [audioUrl, setAudioUrl] = useState("");
 	const [title, setTitle] = useState("");
 	const [downloadUrl, setDownloadUrl] = useState("");
-	const [roomId, setRoomId] = useState(null);
-	const [channel, setChannel] = useState(null);
+	const [roomId, setRoomId] = useState<string | null>(null);
+	const [channel, setChannel] = useState<any>(null);
 	const [loading, setLoading] = useState(false);
 	const [status, setStatus] = useState("");
 	const [activeUsers, setActiveUsers] = useState(0);
 	const [isPlaying, setIsPlaying] = useState(false);
 
-	const audioRef = useRef(null);
+	const audioRef = useRef<HTMLAudioElement>(null);
 	const clients = useRef(new Set());
 	const infoRef = useRef({ title: "", downloadUrl: "" });
 
@@ -93,8 +92,8 @@ export default function AdminPage() {
 		try {
 			const res = await fetch(`https://${API_HOST}/dl?id=${id}`, {
 				headers: {
-					"x-rapidapi-key": API_KEY,
-					"x-rapidapi-host": API_HOST,
+					"x-rapidapi-key": API_KEY || "",
+					"x-rapidapi-host": API_HOST || "",
 				},
 			});
 			const data = await res.json();
@@ -171,13 +170,15 @@ export default function AdminPage() {
 			});
 		} catch (err) {
 			console.error(err);
-			setStatus(err.message || "Failed to fetch audio");
+			const errorMessage =
+				err instanceof Error ? err.message : "Failed to fetch audio";
+			setStatus(errorMessage);
 		} finally {
 			setLoading(false);
 		}
 	};
 
-	const broadcast = (type, extra = {}) => {
+	const broadcast = (type: string, extra = {}) => {
 		if (!channel) return;
 		channel.send({
 			type: "broadcast",
@@ -238,7 +239,7 @@ export default function AdminPage() {
 		}
 	};
 
-	const handleSeek = (offset) => {
+	const handleSeek = (offset: number) => {
 		if (!audioRef.current) return;
 		audioRef.current.currentTime = Math.max(
 			0,
@@ -327,7 +328,7 @@ export default function AdminPage() {
 												const prev = status;
 
 												const copyText = async (
-													text
+													text: string
 												) => {
 													try {
 														// Try modern clipboard API
@@ -444,7 +445,7 @@ export default function AdminPage() {
 							<div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
 								<div>
 									<h3 className="text-xl text-white font-medium leading-snug">
-										<span className="inline break-words align-middle">
+										<span className="inline wrap-break-word align-middle">
 											{title}
 										</span>
 										<Download
